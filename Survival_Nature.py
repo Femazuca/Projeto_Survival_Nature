@@ -1,9 +1,14 @@
 import pygame
 import random
 import time
+import datetime
+import sys
 
 # Inicialização do Pygame
 pygame.init()
+
+# Inicialização do Pygame Mixer
+pygame.mixer.init()
 
 # Configurações da tela
 tela_largura = 1200
@@ -11,16 +16,24 @@ tela_altura = 900
 tela = pygame.display.set_mode((tela_largura, tela_altura))
 pygame.display.set_caption("Survive Nature")
 
+# Carregando a trilha sonora
+pygame.mixer.music.load("trilha-sonora.mp3")
+
 # Carregando imagens
 cenario1 = pygame.image.load("cenario1.png")
 cenario2 = pygame.image.load("cenario2.png")
 cenario3 = pygame.image.load("cenario3.png")
 cenario4 = pygame.image.load("cenario4.png")
 jogador = pygame.image.load("jogador.png")
+jogador_correndo = pygame.image.load("jogador_correndo.png")
 arvore = pygame.image.load("arvore.png")
 pedra_img = pygame.image.load("pedra.png")
 ferro_img = pygame.image.load("ferro.png")
 nivel1_img = pygame.image.load("Nivel1.png")
+nivel2_img = pygame.image.load("Nivel2.png")
+nivel3_img = pygame.image.load("Nivel3.png")
+Imagem_Inicial = pygame.image.load("Tela_Inicial.png")
+
 
 # Posição inicial do jogador
 jogador_x = 400
@@ -36,23 +49,86 @@ limite_inferior_tela = tela_altura
 limite_esquerda_cenario = 0
 limite_direita_cenario = cenario1.get_width() - jogador.get_width()
 
+tempo_maximo = datetime.timedelta(minutes=5)
+tempo_inicial = datetime.datetime.now()
+tempo_atual = datetime.datetime.now()
+nivel = 1
+
 # Variáveis de recursos
 recursos = {
-    "madeira": 100,
-    "pedra": 100,
-    "ferro": 100,
+    "madeira": 0,
+    "pedra": 0,
+    "ferro": 0,
 }
 
 # Fonte para exibir informações na tela
 fonte = pygame.font.Font(None, 36)
 
 # Velocidade do jogador
-velocidade = 5
+velocidade = 10
+
+estado_movimento = "parado"
+tempo_ultima_atualizacao = pygame.time.get_ticks()
+intervalo_animacao = 2
+jogador_ativo = jogador
 
 # Variáveis para controle de árvores, pedras e ferro
 arvores = []
 pedras = []
 ferro = []
+
+# Função para calcular o tempo restante
+def calcular_tempo_restante():
+    tempo_decorrido = tempo_atual - tempo_inicial
+    tempo_restante = tempo_maximo - tempo_decorrido
+    return tempo_restante
+
+# Função para verificar o Game Over
+def verificar_game_over():
+    tempo_restante = calcular_tempo_restante()
+    if tempo_restante.total_seconds() <= 0:
+        return True
+    return False
+
+def exibir_cronometro(tempo_atual):
+        tempo_restante = calcular_tempo_restante()
+        minutos = tempo_restante.seconds // 60
+        segundos = tempo_restante.seconds % 60
+        tempo_formatado = f"{minutos:02d}:{segundos:02d}"
+        texto_cronometro = fonte.render(f"Tempo Restante: {tempo_formatado}", True, (255, 255, 255))
+        tela.blit(texto_cronometro, (10, tela_altura - 40))
+
+
+game_over = False
+def mostrar_game_over():
+    global game_over
+    while game_over:
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                # Reiniciar o jogo
+                recursos["madeira"] = 40
+                recursos["pedra"] = 40
+                recursos["ferro"] = 40
+                itens_comprados.clear()
+                possui_picareta_de_pedra = False
+                possui_picareta_de_ferro = False
+                item_selecionado = None
+                craft_aberto = False
+                prefeitura_comprada = False
+                imagem_aberta = False
+                nivel = 1
+                tempo_inicial = datetime.datetime.now() + tempo_maximo
+                game_over = False  # Isso encerrará o loop do Game Over
+
+        tela.fill((0, 0, 0))  # Preenche a tela de preto
+        texto_game_over = fonte.render("Game Over", True, (255, 0, 0))
+        tela.blit(texto_game_over, ((tela_largura - texto_game_over.get_width()) // 2, (tela_altura - texto_game_over.get_height()) // 2))
+        texto_tentar_novamente = fonte.render("Clique para Tentar Novamente", True, (255, 255, 255))
+        tela.blit(texto_tentar_novamente, ((tela_largura - texto_tentar_novamente.get_width()) // 2, (tela_altura // 2 + 50)))
+        pygame.display.update()
 
 def posicao_segura(nova_x, nova_y, construcoes, distancia_minima, distancia_minima_entre_construcoes):
     for x, y in construcoes:
@@ -103,18 +179,18 @@ itens_craft = {
     "Picareta de Madeira": {"madeira": 5},
     "Picareta de Pedra": {"pedra": 10},
     "Picareta de Ferro": {"ferro": 10},
-    "Prefeitura": {"madeira": 20, "pedra": 20},
-    "Muro": {"madeira": 40, "pedra": 30, "ferro": 10},
-    "Bunker": {"ferro": 40}
+    "Prefeitura": {"madeira": 20, "pedra": 10},
+    "Muro": {"madeira": 30, "pedra": 15, "ferro": 10},
+    "Bunker": {"madeira": 50, "pedra": 30, "ferro": 30},
 }
 
 itens_disponíveis = {
     "Picareta de Madeira": {"madeira": 5},
-    "Picareta de Pedra": {"pedra": 10},
+    "Picareta de Pedra": {"pedra": 10 },
     "Picareta de Ferro": {"ferro": 10},
-    "Prefeitura": {"madeira": 20, "pedra": 20},
-    "Muro": {"madeira": 40, "pedra": 30, "ferro": 10},
-    "Bunker": {"ferro": 40},
+    "Prefeitura": {"madeira": 20, "pedra": 10},
+    "Muro": {"madeira": 25, "pedra": 25, "ferro": 15},
+    "Bunker": {"madeira": 45, "pedra": 35, "ferro": 40},
 }
 
 itens_comprados = {}
@@ -123,8 +199,6 @@ possui_picareta_de_ferro = False  # Variável para verificar se o jogador possui
 item_selecionado = None
 craft_aberto = False
 prefeitura_comprada = False
-imagem_aberta = False
-
 # Posição do botão de craft
 botão_craft_x = tela_largura - 100
 botão_craft_y = 10
@@ -139,7 +213,7 @@ def desenhar_cenario(cenario):
         tela.blit(arvore, (x, y))
     for x, y in ferro:
         tela.blit(ferro_img, (x, y))  # Desenhar minério de ferro
-    tela.blit(jogador, (jogador_x, jogador_y))
+    tela.blit(jogador_ativo, (jogador_x, jogador_y))
 
     # Exibir informações na tela
     for i, (recurso, quantidade) in enumerate(recursos.items()):
@@ -195,10 +269,9 @@ def desenhar_interface_craft():
         tela_craft.blit(texto_aviso, (20, tela_altura - 90))
 
     tela.blit(tela_craft, (0, 0))
-
+nivel_equipamento = 0
 def comprar_item(item):
-    global item_selecionado, recursos, aviso, possui_picareta_de_pedra, imagem_aberta, nivel1_surface
-
+    global item_selecionado, recursos, aviso, possui_picareta_de_pedra, imagem_aberta, nivel_equipamento
     ingredientes = itens_disponíveis.get(item, None)
     
     if ingredientes:
@@ -215,12 +288,15 @@ def comprar_item(item):
             if item in itens_disponíveis:
                 itens_disponíveis.pop(item)
                 itens_comprados[item] = ingredientes
-                if item == "Prefeitura":
-                    imagem_aberta = True  # A imagem é exibida após a compra da prefeitura
-                    nivel1_surface = nivel1_img  # Carregue a imagem Nível 1
                 aviso = f"Você comprou {item}, parabéns!"
+                if item == "Picareta de Madeira":
+                    nivel_equipamento = 1
+                if item == "Picareta de Pedra":
+                    nivel_equipamento = 2
                 if item == "Picareta de Ferro":
-                    possui_picareta_de_ferro = True  
+                    possui_picareta_de_ferro = True
+                    nivel_equipamento = 3
+                
 
 def coletar_madeira():
     for i, (x, y) in enumerate(arvores):
@@ -258,112 +334,221 @@ def coletar_ferro():
         aviso = "Você precisa da picareta de pedra para coletar ferro."
         tempo_do_aviso = time.time()
 
-imagem_aberta = False
-nivel1_surface = None
-
 def desenhar_nivel():
-    global nivel1_surface, imagem_aberta
+    global nivel1_img, nivel2_img, nivel3_img, nivel, tempo_inicial, tempo_maximo
 
-    if "Prefeitura" in itens_comprados:
-        if nivel1_surface is not None and imagem_aberta:
-            tela.blit(nivel1_surface, ((tela_largura - nivel1_surface.get_width()) // 2, (tela_altura - nivel1_surface.get_height()) // 2))
+    if "Prefeitura" in itens_comprados and nivel == 1:
+            tela.blit(nivel1_img, ((tela_largura - nivel1_img.get_width()) // 2, (tela_altura - nivel1_img.get_height()) // 2))
             pygame.draw.rect(tela, (255, 0, 0), (tela_largura - 200, 10, 190, 50))
             texto_fechar = fonte.render("Fechar", True, (255, 255, 255))
             tela.blit(texto_fechar, (tela_largura - 190, 20))
 
-        for evento in pygame.event.get():
-            if evento.type == pygame.MOUSEBUTTONDOWN:
-                if evento.button == 1: 
-                    if tela_largura - 200 <= evento.pos[0] <= tela_largura - 10 and 10 <= evento.pos[1] <= 60:
-                        imagem_aberta = False 
+            for evento in pygame.event.get():
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:
+                        if tela_largura - 200 <= evento.pos[0] <= tela_largura - 10 and 10 <= evento.pos[1] <= 60:
+                            nivel1_img = None
+                            nivel = 2
 
+    if "Muro" in itens_comprados and nivel == 2:
+            tela.blit(nivel2_img, ((tela_largura - nivel2_img.get_width()) // 2, (tela_altura - nivel2_img.get_height()) // 2))
+            pygame.draw.rect(tela, (255, 0, 0), (tela_largura - 200, 10, 190, 50))
+            texto_fechar = fonte.render("Fechar", True, (255, 255, 255))
+            tela.blit(texto_fechar, (tela_largura - 190, 20))
+
+            for evento in pygame.event.get():
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:
+                        if tela_largura - 200 <= evento.pos[0] <= tela_largura - 10 and 10 <= evento.pos[1] <= 60:
+                            nivel2_img = None
+                            nivel = 3
+    
+    if "Bunker" in itens_comprados and nivel == 3:
+            tela.blit(nivel3_img, ((tela_largura - nivel3_img.get_width()) // 2, (tela_altura - nivel3_img.get_height()) // 2))
+            pygame.draw.rect(tela, (255, 0, 0), (tela_largura - 200, 10, 190, 50))
+            texto_fechar = fonte.render("Fechar", True, (255, 255, 255))
+            tela.blit(texto_fechar, (tela_largura - 190, 20))
+
+            for evento in pygame.event.get():
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:
+                        if tela_largura - 200 <= evento.pos[0] <= tela_largura - 10 and 10 <= evento.pos[1] <= 60:
+                            nivel3_img = None
+                            nivel = 4
+        
+
+def desenhar_nivel_atual(nivel):
+    texto_nivel = fonte.render(f"Nível {nivel}", True, (255, 255, 255))
+    tela.blit(texto_nivel, ((tela_largura - texto_nivel.get_width()) // 2, 10))
 
 # Inicialmente, mostramos o primeiro cenário
 cenario_atual = cenario1
 gerar_arvores(50, 100)
 gerar_pedras(100, 100)
 gerar_ferro(200, 100)
+picareta_madeira = False
 
 # Loop principal
 executando = True
+cronometro_reiniciado1 = False
+cronometro_reiniciado2 = False
+tela_inicial = True
+pygame.mixer.music.play(-1)
 while executando:
-    for evento in pygame.event.get():
-        if evento.type == pygame.QUIT:
-            executando = False
-        if evento.type == pygame.KEYDOWN:
-            if evento.key == pygame.K_r:
-                abrir_fechar_craft()
+    while not game_over:   
+        if tela_inicial == False:
+            if nivel == 4 :
+                tela.fill((0, 0, 0))  # Preenche a tela de preto
+                texto_credito = fonte.render("Muito Obrigado por Jogar", True, (255, 0, 0))
+                tela.blit(texto_credito, ((tela_largura - texto_credito.get_width()) // 2, (tela_altura - texto_credito.get_height()) // 2))
+                texto_creditos2 = fonte.render("Desenvolvedor : Felippe Wurcker Goe Mazuca ", True, (255, 255, 255))
+                tela.blit(texto_creditos2, ((tela_largura - texto_creditos2.get_width()) // 2, (tela_altura // 2 + 50)))
+                pygame.display.update()   
+                pygame.time.delay(1000) 
+                        
+            for evento in pygame.event.get():
+                if evento.type == pygame.QUIT:
+                    executando = False
+                    game_over = True
+                if evento.type == pygame.KEYDOWN:
+                    if evento.key == pygame.K_r:
+                        abrir_fechar_craft()
 
-        if evento.type == pygame.MOUSEBUTTONDOWN:
-            if evento.button == 1:  # Botão esquerdo do mouse
-                if not craft_aberto:
-                    coletar_madeira()
-                    coletar_pedra()
-                    coletar_ferro()
-                if craft_aberto:
-                    if tela_largura - 400 <= evento.pos[0] <= tela_largura and 0 <= evento.pos[1] <= tela_altura:
-                        comprar_item("Picareta de Madeira")
-                        comprar_item("Picareta de Pedra")
-                        comprar_item("Picareta de Ferro")
-                        comprar_item("Prefeitura")
-                        comprar_item("Muro")
-                        comprar_item("Bunker")
-                        if "Picareta de Madeira" in itens_comprados or "Picareta de Pedra" in itens_comprados:
-                            possui_picareta_de_pedra = True
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:  # Botão esquerdo do mouse
+                        if not craft_aberto:
+                            coletar_madeira()
+                            coletar_pedra()
+                            coletar_ferro()
+                        if craft_aberto:
+                            if tela_largura - 400 <= evento.pos[0] <= tela_largura and 0 <= evento.pos[1] <= tela_altura:
+                                comprar_item("Picareta de Madeira")
+                                if nivel_equipamento == 1:
+                                    comprar_item("Picareta de Pedra")
+                                if nivel_equipamento == 2:
+                                    comprar_item("Picareta de Ferro")
+                                if nivel_equipamento == 3:
+                                    comprar_item("Prefeitura")
+                                if nivel == 2:
+                                    comprar_item("Muro")
+                                if nivel == 3:
+                                    comprar_item("Bunker")
+                                if "Picareta de Madeira" in itens_comprados or "Picareta de Pedra" in itens_comprados:
+                                    possui_picareta_de_pedra = True
 
-    teclas = pygame.key.get_pressed()
-    if teclas[pygame.K_a] and jogador_x > limite_esquerda_cenario:
-        jogador_x -= velocidade
-    if teclas[pygame.K_d] and jogador_x < limite_direita_cenario:
-        jogador_x += velocidade
+            # Verifica o estado da tecla pressionada
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_a:
+                    estado_movimento = "correndo_esquerda"
+                elif evento.key == pygame.K_d:
+                    estado_movimento = "correndo_direita"
 
-    if jogador_x <= limite_esquerda_cenario:
-        if cenario_atual == cenario1:
-            cenario_atual = cenario2
-            jogador_x = limite_direita_cenario
-        elif cenario_atual == cenario2:
-            cenario_atual = cenario1
-            jogador_x = limite_direita_cenario
-        elif cenario_atual == cenario3:
-            cenario_atual = cenario2
-            jogador_x = limite_direita_cenario
-        elif cenario_atual == cenario4:
-            cenario_atual = cenario3
-            jogador_x = limite_direita_cenario
-        gerar_arvores(50, 100)
-        gerar_pedras(100, 100)
-        gerar_ferro(200, 100)
+            # Verifica o estado da tecla solta
+            if evento.type == pygame.KEYUP:
+                if evento.key == pygame.K_a or evento.key == pygame.K_d:
+                    estado_movimento = "parado"
+            
+            teclas = pygame.key.get_pressed()
+            if teclas[pygame.K_a] and jogador_x > limite_esquerda_cenario:
+                jogador_x -= velocidade
+                estado_movimento = "correndo"
+            if teclas[pygame.K_d] and jogador_x < limite_direita_cenario:
+                jogador_x += velocidade
+                estado_movimento = "correndo"
+            else:
+                estado_movimento = "parado"
+            
+            # Atualizando a tela
+            tela.fill((0, 0, 0))
+        
+           # Verificando e alternando a imagem do jogador
+            tempo_atual = pygame.time.get_ticks()
+            if estado_movimento == "correndo" and tempo_atual - tempo_ultima_atualizacao > intervalo_animacao:
+                jogador_ativo = jogador_correndo
+                tempo_ultima_atualizacao = tempo_atual
+            else:
+                jogador_ativo = jogador
 
-    elif jogador_x >= limite_direita_cenario:
-        if cenario_atual == cenario1:
-            cenario_atual = cenario2
-            jogador_x = limite_esquerda_cenario
-        elif cenario_atual == cenario2:
-            cenario_atual = cenario1
-            jogador_x = limite_esquerda_cenario
-        elif cenario_atual == cenario3:
-            cenario_atual = cenario4
-            jogador_x = limite_esquerda_cenario
-        elif cenario_atual == cenario4:
-            cenario_atual = cenario3
-            jogador_x = limite_esquerda_cenario
-        gerar_arvores(50, 100)
-        gerar_pedras(100, 100)
-        gerar_ferro(200, 100)
+            if jogador_x <= limite_esquerda_cenario:
+                if cenario_atual == cenario1:
+                    cenario_atual = cenario2
+                    jogador_x = limite_direita_cenario
+                elif cenario_atual == cenario2:
+                    cenario_atual = cenario1
+                    jogador_x = limite_direita_cenario
+                elif cenario_atual == cenario3:
+                    cenario_atual = cenario2
+                    jogador_x = limite_direita_cenario
+                elif cenario_atual == cenario4:
+                    cenario_atual = cenario3
+                    jogador_x = limite_direita_cenario
+                gerar_arvores(50, 100)
+                gerar_pedras(100, 100)
+                gerar_ferro(200, 100)
 
-    if not craft_aberto:
-        desenhar_cenario(cenario_atual)
-        desenhar_botão_craft()
-    else:
-        desenhar_interface_craft()
-        desenhar_nivel()
+            elif jogador_x >= limite_direita_cenario:
+                if cenario_atual == cenario1:
+                    cenario_atual = cenario2
+                    jogador_x = limite_esquerda_cenario
+                elif cenario_atual == cenario2:
+                    cenario_atual = cenario1
+                    jogador_x = limite_esquerda_cenario
+                elif cenario_atual == cenario3:
+                    cenario_atual = cenario4
+                    jogador_x = limite_esquerda_cenario
+                elif cenario_atual == cenario4:
+                    cenario_atual = cenario3
+                    jogador_x = limite_esquerda_cenario
+                gerar_arvores(50, 100)
+                gerar_pedras(100, 100)
+                gerar_ferro(200, 100)
 
-    if aviso and time.time() - tempo_do_aviso >= aviso_duracao:
-        aviso = ""
+            # Atualiza o tempo atual
+            tempo_atual = datetime.datetime.now()
 
-    # Verifique se a imagem da prefeitura está aberta e renderize-a
+            if not craft_aberto:
+                desenhar_cenario(cenario_atual)
+                desenhar_botão_craft()
+            else:
+                desenhar_interface_craft()
+                desenhar_nivel()
 
-    pygame.display.update()
+            if aviso and time.time() - tempo_do_aviso >= aviso_duracao:
+                aviso = ""
 
-# Finaliza o jogo
+            # Exibir o cronômetro na tela
+            exibir_cronometro(tempo_atual)
+
+            # Desenhar o nível atual na tela
+            desenhar_nivel_atual(nivel)
+
+            if nivel == 2 and not cronometro_reiniciado1:
+                tempo_inicial = datetime.datetime.now()
+                cronometro_reiniciado1 = True
+            
+            if nivel == 3 and not cronometro_reiniciado2:
+                tempo_inicial = datetime.datetime.now()
+                cronometro_reiniciado2 = True
+
+            if verificar_game_over():
+                game_over = True
+
+            pygame.display.update()
+
+        if tela_inicial == True:
+            tela.blit(Imagem_Inicial, ((tela_largura - Imagem_Inicial.get_width()) // 2, (tela_altura - Imagem_Inicial.get_height()) // 2))
+            pygame.draw.rect(tela, (255, 0, 0), (tela_largura - 200, 10, 190, 50))
+            texto_fechar = fonte.render("Fechar", True, (255, 255, 255))
+            tela.blit(texto_fechar, (tela_largura - 190, 20))
+            pygame.display.update()
+
+            for evento in pygame.event.get():
+                if evento.type == pygame.MOUSEBUTTONDOWN:
+                    if evento.button == 1:
+                        if tela_largura - 200 <= evento.pos[0] <= tela_largura - 10 and 10 <= evento.pos[1] <= 60:
+                            Imagem_Inicial = None
+                            tela_inicial = False
+    mostrar_game_over()
+
+    # Finaliza o jogo
 pygame.quit()
